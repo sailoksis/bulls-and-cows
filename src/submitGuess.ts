@@ -1,6 +1,6 @@
-import { evaluateGuess } from './evaluateGuess';
-import { isValidGuess } from './isValidGuess';
-import type { GameState, GuessEntry } from './gameTypes';
+import { evaluateGuess } from './evaluateGuess.js';
+import { isValidGuess } from './isValidGuess.js';
+import type { GameState, GuessEntry } from './gameTypes.js';
 
 export function submitGuess(state: GameState, guess: string): GameState {
   if (state.status !== 'playing') {

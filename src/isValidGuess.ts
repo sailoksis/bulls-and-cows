@@ -1,4 +1,4 @@
-import { createDigitValidator } from './createDigitValidator';
+import { createDigitValidator } from './createDigitValidator.js';
 
 export function isValidGuess(
   guess: string,

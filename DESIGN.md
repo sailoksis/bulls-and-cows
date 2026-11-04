@@ -14,6 +14,20 @@ The application separates game logic from the user interface.
 
 This separation makes the game logic easier to test, understand, and maintain.
 
+### 1.1 TypeScript Compilation and Browser Modules
+
+The application uses TypeScript for both game logic and user interface code.
+
+TypeScript source files are stored in the `src/` directory and compiled into JavaScript files in the `dist/` directory using `tsc`.
+
+The project uses native ES modules without requiring a bundler.
+
+Relative imports use the `.js` extension so that the compiled JavaScript modules can be resolved by the browser.
+
+The application entry point is `src/index.ts`, which compiles to `dist/index.js` and is loaded from `index.html` using `<script type="module">`.
+
+Unit tests are written in TypeScript and executed using Vitest.
+
 ## 2. Data Structures
 
 ### 2.1 Game Settings
