@@ -3,9 +3,23 @@ export function generateSecret(
   base: number,
   random: () => number = Math.random,
 ): string {
-  void length;
-  void base;
-  void random;
+  const availableDigits = Array.from({ length: base }, (_, index) =>
+    index.toString(16),
+  );
 
-  return '';
+  if (length < 1 || length > base) {
+    throw new RangeError('Invalid secret length');
+  }
+
+  let secret = '';
+
+  for (let index = 0; index < length; index += 1) {
+    const randomIndex = Math.floor(random() * availableDigits.length);
+
+    const [digit] = availableDigits.splice(randomIndex, 1);
+
+    secret += digit;
+  }
+
+  return secret;
 }
