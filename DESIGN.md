@@ -4,15 +4,15 @@
 
 Bulls and Cows is a browser-based guessing game developed with TypeScript using functional programming principles.
 
-The application separates game logic from the user interface.
+The application separates game logic, user interface, and persistence.
 
 **Game logic** is implemented as independent functions that do not access the DOM or browser storage.
 
-**User interface** is responsible for displaying the game, handling user interactions, and updating the page.
+**User interface** is implemented in `src/index.ts`. It is responsible for creating HTML elements, handling user interactions, and updating the displayed game state.
 
-**Persistence** is responsible for saving and loading leaderboard results using localStorage.
+**Persistence** is implemented in `src/leaderboard.ts`. It is responsible for saving and loading leaderboard results using `localStorage`.
 
-This separation makes the game logic easier to test, understand, and maintain.
+This separation makes the application easier to test, understand, and maintain.
 
 ### 1.1 TypeScript Compilation and Browser Modules
 
@@ -22,9 +22,15 @@ TypeScript source files are stored in the `src/` directory and compiled into Jav
 
 The project uses native ES modules without requiring a bundler.
 
-Relative imports use the `.js` extension so that the compiled JavaScript modules can be resolved by the browser.
+Relative imports use the `.js` extension so that compiled JavaScript modules can be resolved by the browser.
 
 The application entry point is `src/index.ts`, which compiles to `dist/index.js` and is loaded from `index.html` using `<script type="module">`.
+
+The HTML body contains only the script element. All interface elements are created dynamically using DOM methods such as `document.createElement`, `append`, and `textContent`.
+
+The application does not use `innerHTML` or `insertAdjacentHTML` to generate dynamic content.
+
+Visual styling is defined in `style.css`.
 
 Unit tests are written in TypeScript and executed using Vitest.
 
@@ -39,53 +45,80 @@ The game settings contain two values:
 
 The selected length cannot exceed the base. For binary games, only length 2 is available.
 
-Settings cannot be changed after a round starts.
+Settings are selected before starting a round and cannot be changed during an active game.
+
+The interface updates the available lengths when the numeral system changes.
 
 ### 2.2 Game State
 
-The game state will be represented by a TypeScript object containing:
+**File:** `src/gameTypes.ts`
+
+The game state is represented by a TypeScript object containing:
 
 - `secret` — the generated secret as a string.
 - `length` — the selected secret length.
 - `base` — the selected numeral system.
-- `status` — whether the game is in progress or won.
+- `status` — either `playing` or `won`.
 - `history` — an array of previous guesses.
 - `startedAt` — the round start timestamp.
 
 A string is used for the secret to preserve leading zeros.
 
+For example, `0123` is a valid four-digit secret.
+
+The current game state is managed by the interface, while game state transitions are calculated separately by `submitGuess`.
+
 ### 2.3 Guess History
 
-Each guess will be represented by an object containing:
+**Files:** `src/gameTypes.ts`, `src/submitGuess.ts`
+
+Each guess is represented by an object containing:
 
 - `guess` — the player's input.
 - `bulls` — the number of digits in the correct positions.
 - `cows` — the number of correct digits in incorrect positions.
 
-The history will be stored in an array to preserve the chronological order of attempts.
+The history is stored in an array to preserve the chronological order of attempts.
 
-The history will be updated immutably by creating a new array:
+The `submitGuess` function updates the history immutably by creating a new array:
 
 ```ts
-const nextHistory = [...history, newEntry];
+history: [...state.history, newEntry];
 ```
 
-Existing history entries will not be modified.
+Existing history entries are not modified.
+
+The function also prevents duplicate guesses from creating additional history entries.
 
 ### 2.4 Leaderboard
 
-Each leaderboard entry will contain:
+**File:** `src/leaderboard.ts`
 
-- The number of attempts.
-- The completion time.
-- The secret length.
-- The numeral system.
+Each leaderboard entry contains:
 
-Results will be stored in localStorage.
+- `attempts` — the number of attempts required to win.
+- `elapsedSeconds` — the completion time in seconds.
+- `length` — the secret length.
+- `base` — the numeral system.
 
-Leaderboard entries will be sorted by the number of attempts, then by completion time when attempts are equal.
+Results are stored in browser `localStorage`.
 
-The leaderboard will display the settings associated with each result so that scores from different game configurations remain identifiable.
+The leaderboard contains up to 10 best results.
+
+Entries are sorted by:
+
+1. Number of attempts, in ascending order.
+2. Completion time, in ascending order when the number of attempts is equal.
+
+The `sortLeaderboard` function creates a copy of the input array before sorting, so the original array is not modified.
+
+The `loadLeaderboard` function reads saved results from `localStorage`.
+
+The `saveLeaderboard` function adds a new result, sorts the leaderboard, limits it to 10 entries, and saves the updated results.
+
+Browser storage operations are wrapped in error handling so that unavailable or invalid storage data does not prevent the game from running.
+
+The interface displays the length and numeral system associated with each result, allowing scores from different configurations to remain identifiable.
 
 ## 3. Core Algorithms
 
@@ -101,12 +134,14 @@ Algorithm:
 2. Validate the requested secret length.
 3. Select a random index from the available digits.
 4. Remove the selected digit from the array using `splice`.
-5. Append the digit to the secret string.
+5. Append the selected digit to the secret string.
 6. Repeat until the secret reaches the requested length.
 
 Removing selected digits prevents duplicates.
 
 The random number generator is passed as a parameter, making the function testable with a deterministic random source.
+
+The generated secret may start with zero.
 
 ### 3.2 evaluateGuess
 
@@ -140,7 +175,14 @@ The returned predicate checks whether a character belongs to the selected numera
 
 For hexadecimal digits, uppercase and lowercase letters are treated equally.
 
-This demonstrates a curried-style function factory and allows the same validation logic to be reused in guess validation and UI input filtering.
+This demonstrates a curried-style function factory.
+
+The same validation logic is reused in:
+
+- `src/isValidGuess.ts` — validating complete guesses.
+- `src/index.ts` — filtering invalid characters during user input.
+
+This prevents duplicated validation rules.
 
 ### 3.4 isValidGuess
 
@@ -157,6 +199,8 @@ Algorithm:
 5. Use a `Set` to check that all digits are unique.
 6. Return `true` only when all validation conditions are satisfied.
 
+The function does not modify the input or access browser elements.
+
 ### 3.5 countPossibleSecrets
 
 **File:** `src/countPossibleSecrets.ts`
@@ -167,11 +211,16 @@ A secret may start with zero.
 
 The number of possible secrets is the number of permutations:
 
-P(base, length) = base! / (base - length)!
+\[
+P(base, length) = \frac{base!}{(base - length)!}
+\]
 
 The function uses recursion:
 
-countPossibleSecrets(length, base) = base × countPossibleSecrets(length - 1, base - 1)
+```text
+countPossibleSecrets(length, base)
+  = base * countPossibleSecrets(length - 1, base - 1)
+```
 
 Base cases:
 
@@ -186,6 +235,28 @@ Each computed result is stored using a key containing `length` and `base`.
 Before calculating a result, the function checks whether it is already cached.
 
 This avoids repeating the same calculation for previously requested arguments.
+
+### 3.6 submitGuess
+
+**File:** `src/submitGuess.ts`
+
+The `submitGuess` function handles a single game state transition.
+
+Algorithm:
+
+1. Check whether the game is still in progress.
+2. Normalize the guess to lowercase.
+3. Validate the guess using `isValidGuess`.
+4. Check whether the guess already exists in the history.
+5. Evaluate the guess using `evaluateGuess`.
+6. Create a new history entry.
+7. Return a new game state with an updated history and status.
+
+If the guess is invalid, already used, or submitted after the game has ended, the function returns the existing state without modifying it.
+
+When the number of bulls equals the secret length, the returned state has the status `won`.
+
+The function does not access the DOM or browser storage.
 
 ## 4. Time and Space Complexity
 
@@ -272,6 +343,8 @@ Examples:
 - `isValidGuess` — checks whether a guess is valid.
 - `createDigitValidator` — creates a digit validation function.
 - `countPossibleSecrets` — calculates the number of possible secrets.
+- `submitGuess` — processes a guess and returns the next game state.
+- `sortLeaderboard` — sorts and limits leaderboard results.
 
 In `src/evaluateGuess.ts`, the variables `secretDigits`, `guessDigits`, `bulls`, and `cows` describe their roles without requiring additional comments.
 
@@ -285,8 +358,10 @@ Examples:
 - `src/evaluateGuess.ts` — comparison of a secret and a guess.
 - `src/isValidGuess.ts` — guess validation.
 - `src/countPossibleSecrets.ts` — counting possible secrets.
+- `src/submitGuess.ts` — game state transitions.
+- `src/leaderboard.ts` — leaderboard sorting and persistence.
 
-Separating responsibilities makes the functions easier to understand, test, and maintain.
+Separating responsibilities makes functions easier to understand, test, and maintain.
 
 ### 5.3 Don't Repeat Yourself (DRY)
 
@@ -294,13 +369,13 @@ The digit validation logic is centralized in `src/createDigitValidator.ts`.
 
 The `isValidGuess` function reuses `createDigitValidator` instead of implementing the same character validation logic again.
 
-The UI will also reuse this validator when filtering player input.
+The UI also reuses this validator when filtering player input.
 
 This prevents duplicated validation rules.
 
 ### 5.4 Pure Functions and Separation of Concerns
 
-The core game functions are independent of the DOM, localStorage, and user interface elements.
+The core game functions are independent of the DOM, `localStorage`, and user interface elements.
 
 For example, `evaluateGuess` receives a secret and a guess as arguments and returns a result without changing external state.
 
@@ -308,7 +383,11 @@ For example, `evaluateGuess` receives a secret and a guess as arguments and retu
 
 The memoization cache in `countPossibleSecrets` is an internal implementation detail. The function returns the same result for the same valid inputs, although the cache itself is mutable.
 
-Browser interactions and localStorage operations will remain outside the core game logic.
+The `sortLeaderboard` function is also pure: it returns a sorted copy without modifying its input.
+
+Browser interactions and `localStorage` operations remain outside the core game logic.
+
+The persistence functions `loadLeaderboard` and `saveLeaderboard` are intentionally not pure because they interact with browser storage.
 
 ### 5.5 Small Functions
 
@@ -316,21 +395,128 @@ Core functions are focused on specific tasks rather than combining validation, c
 
 For example, `isValidGuess` checks the input and returns a boolean. It does not display error messages or modify the page.
 
+Similarly, `submitGuess` calculates the next game state without rendering HTML.
+
+The `renderLeaderboard` function in `src/index.ts` is responsible only for displaying leaderboard entries.
+
 This reduces complexity and makes individual functions easier to test.
 
 ### 5.6 Immutability
 
-The game state and guess history will be updated by creating new objects and arrays rather than modifying existing ones.
+The game state and guess history are updated by creating new objects and arrays rather than modifying existing ones.
 
-For example:
+For example, `submitGuess` returns a new state:
 
 ```ts
-const nextState = {
+return {
   ...state,
   history: [...state.history, newEntry],
+  status: result.bulls === state.length ? 'won' : 'playing',
 };
 ```
 
 This approach preserves previous history entries and makes state changes predictable.
 
-The immutable state update logic will be implemented separately from DOM rendering.
+The leaderboard follows the same principle when sorting results:
+
+```ts
+return [...entries]
+  .sort(
+    (first, second) =>
+      first.attempts - second.attempts ||
+      first.elapsedSeconds - second.elapsedSeconds,
+  )
+  .slice(0, MAX_RESULTS);
+```
+
+The original leaderboard array remains unchanged.
+
+The interface updates its current state reference after receiving a new state from the game logic.
+
+Game state transitions remain separate from DOM rendering.
+
+## 6. Testing and TDD
+
+**Test runner:** Vitest
+
+The project follows Test-Driven Development for the five mandatory core functions:
+
+- `generateSecret`
+- `evaluateGuess`
+- `isValidGuess`
+- `createDigitValidator`
+- `countPossibleSecrets`
+
+For each mandatory function, failing tests were committed before the corresponding implementation.
+
+The implementation was then committed separately after the tests passed.
+
+Tests follow the FIRST principles:
+
+- **Fast** — tests execute quickly.
+- **Independent** — tests do not depend on execution order.
+- **Repeatable** — deterministic inputs produce predictable results.
+- **Self-validating** — assertions automatically verify expected behavior.
+- **Timely** — tests were written before the implementations.
+
+The project also includes tests for `submitGuess`, covering game state transitions, duplicate guesses, and winning conditions.
+
+The current test suite contains 41 tests across six test files.
+
+## 7. Development Tools
+
+The project uses:
+
+- **TypeScript** for static typing.
+- **ESLint** for code quality checks.
+- **Prettier** for consistent formatting.
+- **Vitest** for unit testing.
+- **Husky** for Git hooks.
+- **lint-staged** for checking staged files.
+
+The `pre-commit` hook runs `lint-staged`, which applies ESLint and Prettier to relevant staged files.
+
+The `pre-push` hook runs `npm test` to prevent pushing changes when tests fail.
+
+The project provides the following npm scripts:
+
+- `npm run lint`
+- `npm run format`
+- `npm test`
+
+TypeScript compilation is performed using:
+
+```bash
+npx tsc
+```
+
+## 8. User Interface and Game Flow
+
+**File:** `src/index.ts`
+
+The interface is generated dynamically using TypeScript and DOM methods.
+
+The game flow is:
+
+1. The player selects a numeral system and secret length.
+2. The interface displays the number of possible secrets.
+3. The player starts a new round.
+4. The application generates a secret number.
+5. The player enters a guess.
+6. Invalid characters and duplicate digits are filtered during input.
+7. The guess is validated and evaluated.
+8. The result is added to the guess history.
+9. The player continues until the secret is guessed.
+10. The game displays the number of attempts and elapsed time.
+11. The result is saved to the leaderboard.
+12. The player can start a new game without reloading the page.
+
+The leaderboard is stored in `localStorage`, so saved results remain available after a page reload.
+
+The interface supports binary, octal, decimal, and hexadecimal numeral systems.
+
+Hexadecimal input is case-insensitive.
+
+The application uses a responsive, minimalist interface defined in `style.css`.
+
+The game logic remains independent of the interface and can be tested without a browser.
